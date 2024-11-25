@@ -15,14 +15,14 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     Função que gera a matriz A_{ula} 
     m_antennas (int): número de antenas do arranjo
     d_in (float): número de direções de chegada
-    theta_i (float): ângulo de chegada
+    theta_i (float): ângulo de chegada em graus
 
     return: A_{ula} (np.array): matriz A_{ula}
     
     '''
 
 
-    mu_spatial_frequency = -np.pi*np.sin(theta_i)
+    mu_spatial_frequency = -np.pi*np.sin(np.radians(theta_i))
 
     A_ula = np.zeros((m_antennas, d_in), dtype=complex)
 
@@ -32,24 +32,34 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     
     return A_ula
 
+
+
 def generate_signal(m_antennas:int, noise_subspace):
+    '''
+    Função que gera o espectro de potência do sinal recebido
+    m_antennas (int): número de antenas do arranjo
+    noise_subspace (np.array): subespaço de ruído
+
+    return: angles (np.array): ângulos avaliados, p_spectrum (np.array): espectro de potência do sinal recebido.
+    
+    '''
     
     # Estimando o espectro de potência
-    angles = np.linspace(-np.pi/2, np.pi/2, 180)
+    angles = np.linspace(-90, 90, 181)
     p_spectrum = np.zeros(angles.shape)
 
     # Calculando o espectro de potência
     for index_angle, angle in enumerate(angles):
-        steering_vector = np.exp(1j * np.arange(m_antennas) * (-np.pi * np.sin(angle))) # Vetor de direção, que é o vetor de entrada da matriz A
+        steering_vector = np.exp(1j * np.arange(m_antennas) * (-np.pi * np.sin(np.radians(angle)))) # Vetor de direção, que é o vetor de entrada da matriz A
 
         numerator = np.abs(np.dot(np.conj(steering_vector.T), steering_vector))
         denominator = np.abs(np.dot(np.conj(steering_vector.T), np.dot(noise_subspace, np.dot(np.conj(noise_subspace.T), steering_vector))))
         
         p_spectrum[index_angle] = numerator / denominator if denominator != 0 else 0
 
-    angles = np.degrees(angles)
-
     return angles, p_spectrum
+
+
 
 def generate_music(A_ula: np.ndarray, arrival_distance: int, t_snapshot: int, m_antennas: int, snr: float):
     """
@@ -101,31 +111,110 @@ def generate_music(A_ula: np.ndarray, arrival_distance: int, t_snapshot: int, m_
     return angles, p_spectrum
 
 
-def find_rmse(snr_values, iterations, m_antennas, d_arrival, t_snapshot):
-    rmse = []
+
+def generate_angles_with_min_diff(d_arrival, min_diff, lower=-90, upper=90):
+    """
+    Gera ângulos uniformemente distribuídos com uma diferença mínima entre eles.
+    
+    Parâmetros:
+    - d_arrival (int): Número de ângulos a serem gerados.
+    - min_diff (float): Diferença mínima permitida entre ângulos consecutivos.
+    - lower (float): Limite inferior do intervalo de geração.
+    - upper (float): Limite superior do intervalo de geração.
+    
+    Retorno:
+    - np.ndarray: Ângulos gerados com diferença mínima garantida. (em graus)
+    """
+    while True:
+        phi_uniform = np.random.uniform(lower, upper, d_arrival)
+        phi_uniform_sorted = np.sort(phi_uniform)
+        if np.all(np.diff(phi_uniform_sorted) >= min_diff):
+            return phi_uniform_sorted
+
+
+def find_peaks_d(p_spectrum, d_arrival, height=0):
+    """
+    Encontra os picos no espectro MUSIC.
+    
+    Parâmetros:
+    - p_spectrum (np.ndarray): Espectro MUSIC.
+    - height (float): Altura mínima do pico.
+    
+    Retorno:
+    - peaks (np.ndarray): Índices dos picos encontrados.
+    - _ (dict): Informações adicionais sobre os picos.
+    """
+    peaks, _ = find_peaks(p_spectrum, height=0)
+    sorted_peaks = np.argsort(p_spectrum[peaks]) # Ordenando picos por altura
+    top_peaks = peaks[sorted_peaks[-d_arrival:]] # Obtendo os dois maiores picos
+    top_peaks = top_peaks - 90
+    top_peaks = np.sort(top_peaks)
+
+    return top_peaks, _
+
+
+
+def find_rmse(snr_values: np.ndarray, iterations:int, m_antennas:int, d_arrival:int, t_snapshot:int):
+    '''
+    Calcula o RMSE (Root Mean Square Error) dos ângulos estimados pelo algoritmo MUSIC em diferentes valores de SNR.
+
+    Parâmetros:
+    - snr_values (list or np.ndarray): Lista de valores de SNR (em dB) a serem avaliados.
+    - iterations (int): Número de iterações por valor de SNR.
+    - m_antennas (int): Número de antenas no arranjo.
+    - d_arrival (int): Número de ângulos de chegada (direções de chegada).
+    - t_snapshot (int): Número de snapshots para estimativa de autocorrelação.
+
+    Retorno:
+    - rmse_maior (list): Lista com os valores de RMSE para os maiores ângulos estimados, correspondentes a cada SNR.
+    - rmse_menor (list): Lista com os valores de RMSE para os menores ângulos estimados, correspondentes a cada SNR.
+
+    '''
+
+    rmse_maior = []
+    rmse_menor = []
     for snr_index in snr_values:
-        all_theta = []
+        real_phi_maior = []
+        real_phi_menor = []
+        estimad_phi_maior = []
+        estimad_phi_menor = []
+        #phi_uniform = generate_angles_with_min_diff(d_arrival, min_diff=30)
+        
 
         for iteration_index in range(iterations):
-            phi_uniform = np.random.uniform(-60,60,m_antennas) # Gerando os ângulos de chegada
-            phit_uniform = np.radians(phi_uniform) # Convertendo para radianos
+
+           # Gerando os ângulos de chegada
+           # phi_uniform = [30, 60]
+            phi_uniform = generate_angles_with_min_diff(d_arrival, min_diff=20)
+            #phi_uniform = [0,60]
+
+            
+            phit_uniform = np.sort(phi_uniform) # Ordenando os ângulos de chegada em ordem crescente
 
             A_ula = gerate_a_ula(m_antennas, d_arrival, phit_uniform)
             angles, p_spectrum = generate_music(A_ula, d_arrival, t_snapshot, m_antennas, snr_index)
 
             # Calculando os ângulos de pico estimados pelo MUSIC
-            peaks, _ = find_peaks(p_spectrum, height=0)
-            sorted_peaks = np.argsort(p_spectrum[peaks]) # Ordenando picos por altura
-            top_peaks = peaks[sorted_peaks[-d_arrival:]] - 90 # Obtendo os dois maiores picos e transladando eles para que o centro seja 0
+            
+            top_peak_angles, _ = find_peaks_d(p_spectrum, d_arrival, height=0)
 
-            all_theta.append(top_peaks)
 
-        all_theta = np.array(all_theta)
-        phi_r = all_theta[:,0]
-        hat_phi_r = all_theta[:,1]
+            real_phi_maior.append(phit_uniform[0] - top_peak_angles[0])
+            real_phi_menor.append(phit_uniform[1] - top_peak_angles[1])
+
+        
+
+
+        real_phi_maior = np.array(real_phi_maior)
+        real_phi_menor = np.array(real_phi_menor)
+
+
 
         # Calculando o RMSE
-        rmse.append(np.sqrt(np.mean((phi_r -  hat_phi_r)**2)))
 
-    return rmse
+        rmse_maior.append(np.sqrt(np.mean((np.abs(real_phi_maior))**2)))
+        rmse_menor.append(np.sqrt(np.mean((np.abs(real_phi_menor))**2)))
+
+    return rmse_maior, rmse_menor
+
 
