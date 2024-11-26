@@ -22,6 +22,9 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     '''
 
 
+    mag = np.array([[6,0],[0,4]])
+
+
     mu_spatial_frequency = -np.pi*np.sin(np.radians(theta_i))
 
     A_ula = np.zeros((m_antennas, d_in), dtype=complex)
@@ -29,6 +32,8 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     for col in range (d_in):
         for row in range (m_antennas):
             A_ula[row, col] = np.exp(1j * row * mu_spatial_frequency[col])
+
+    A_ula = np.dot(A_ula, mag)
     
     return A_ula
 
@@ -79,7 +84,7 @@ def generate_music(A_ula: np.ndarray, arrival_distance: int, t_snapshot: int, m_
     # Gerar o sinal transmitido
     sinal = np.zeros((arrival_distance, t_snapshot), dtype=complex)
     for i in range(arrival_distance):
-        sinal[i] = np.sin(2 * np.pi * random.random() * np.arange(t_snapshot))
+        sinal[i] = (np.random.normal(size=t_snapshot) + 1j * np.random.normal(size=t_snapshot)) / np.sqrt(2)
 
     # Sinal recebido no arranjo de antenas
     sinal_aula = np.dot(A_ula, sinal)
@@ -174,10 +179,8 @@ def find_rmse(snr_values: np.ndarray, iterations:int, m_antennas:int, d_arrival:
     rmse_maior = []
     rmse_menor = []
     for snr_index in snr_values:
-        real_phi_maior = []
-        real_phi_menor = []
-        estimad_phi_maior = []
-        estimad_phi_menor = []
+        phi_maior = []
+        phi_menor = []
         #phi_uniform = generate_angles_with_min_diff(d_arrival, min_diff=30)
         
 
@@ -185,12 +188,10 @@ def find_rmse(snr_values: np.ndarray, iterations:int, m_antennas:int, d_arrival:
 
            # Gerando os ângulos de chegada
            # phi_uniform = [30, 60]
-            phi_uniform = generate_angles_with_min_diff(d_arrival, min_diff=20)
+            phit_uniform = generate_angles_with_min_diff(d_arrival, 20)
             #phi_uniform = [0,60]
 
             
-            phit_uniform = np.sort(phi_uniform) # Ordenando os ângulos de chegada em ordem crescente
-
             A_ula = gerate_a_ula(m_antennas, d_arrival, phit_uniform)
             angles, p_spectrum = generate_music(A_ula, d_arrival, t_snapshot, m_antennas, snr_index)
 
@@ -198,22 +199,25 @@ def find_rmse(snr_values: np.ndarray, iterations:int, m_antennas:int, d_arrival:
             
             top_peak_angles, _ = find_peaks_d(p_spectrum, d_arrival, height=0)
 
+            maior_diferenca = phit_uniform[0] - top_peak_angles[0] 
+            menor_diferena = phit_uniform[1] - top_peak_angles[1]
 
-            real_phi_maior.append(phit_uniform[0] - top_peak_angles[0])
-            real_phi_menor.append(phit_uniform[1] - top_peak_angles[1])
+
+            phi_maior.append(maior_diferenca)
+            phi_menor.append(menor_diferena)
 
         
 
 
-        real_phi_maior = np.array(real_phi_maior)
-        real_phi_menor = np.array(real_phi_menor)
+        phi_maior = np.array(phi_maior)
+        phi_menor = np.array(phi_menor)
 
 
 
         # Calculando o RMSE
 
-        rmse_maior.append(np.sqrt(np.mean((np.abs(real_phi_maior))**2)))
-        rmse_menor.append(np.sqrt(np.mean((np.abs(real_phi_menor))**2)))
+        rmse_maior.append(np.sqrt(np.mean(np.abs(phi_maior)**2)))
+        rmse_menor.append(np.sqrt(np.mean(np.abs(phi_menor)**2)))
 
     return rmse_maior, rmse_menor
 
