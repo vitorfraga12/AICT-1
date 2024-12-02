@@ -22,8 +22,6 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     '''
 
 
-    mag = np.array([[6,0],[0,4]])
-
 
     mu_spatial_frequency = -np.pi*np.sin(np.radians(theta_i))
 
@@ -33,7 +31,6 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
         for row in range (m_antennas):
             A_ula[row, col] = np.exp(1j * row * mu_spatial_frequency[col])
 
-    A_ula = np.dot(A_ula, mag)
     
     return A_ula
 
@@ -159,66 +156,7 @@ def find_peaks_d(p_spectrum, d_arrival, height=0):
 
 
 
-def find_rmse(snr_values: np.ndarray, iterations:int, m_antennas:int, d_arrival:int, t_snapshot:int):
-    '''
-    Calcula o RMSE (Root Mean Square Error) dos ângulos estimados pelo algoritmo MUSIC em diferentes valores de SNR.
-
-    Parâmetros:
-    - snr_values (list or np.ndarray): Lista de valores de SNR (em dB) a serem avaliados.
-    - iterations (int): Número de iterações por valor de SNR.
-    - m_antennas (int): Número de antenas no arranjo.
-    - d_arrival (int): Número de ângulos de chegada (direções de chegada).
-    - t_snapshot (int): Número de snapshots para estimativa de autocorrelação.
-
-    Retorno:
-    - rmse_maior (list): Lista com os valores de RMSE para os maiores ângulos estimados, correspondentes a cada SNR.
-    - rmse_menor (list): Lista com os valores de RMSE para os menores ângulos estimados, correspondentes a cada SNR.
-
-    '''
-
-    rmse_maior = []
-    rmse_menor = []
-    for snr_index in snr_values:
-        phi_maior = []
-        phi_menor = []
-        #phi_uniform = generate_angles_with_min_diff(d_arrival, min_diff=30)
-        
-
-        for iteration_index in range(iterations):
-
-           # Gerando os ângulos de chegada
-           # phi_uniform = [30, 60]
-            phit_uniform = generate_angles_with_min_diff(d_arrival, 20)
-            #phi_uniform = [0,60]
-
-            
-            A_ula = gerate_a_ula(m_antennas, d_arrival, phit_uniform)
-            angles, p_spectrum = generate_music(A_ula, d_arrival, t_snapshot, m_antennas, snr_index)
-
-            # Calculando os ângulos de pico estimados pelo MUSIC
-            
-            top_peak_angles, _ = find_peaks_d(p_spectrum, d_arrival, height=0)
-
-            maior_diferenca = phit_uniform[0] - top_peak_angles[0] 
-            menor_diferena = phit_uniform[1] - top_peak_angles[1]
 
 
-            phi_maior.append(maior_diferenca)
-            phi_menor.append(menor_diferena)
-
-        
-
-
-        phi_maior = np.array(phi_maior)
-        phi_menor = np.array(phi_menor)
-
-
-
-        # Calculando o RMSE
-
-        rmse_maior.append(np.sqrt(np.mean(np.abs(phi_maior)**2)))
-        rmse_menor.append(np.sqrt(np.mean(np.abs(phi_menor)**2)))
-
-    return rmse_maior, rmse_menor
 
 
