@@ -35,6 +35,36 @@ def gerate_a_ula(m_antennas:int, d_in:float, theta_i:float):
     return A_ula
 
 
+def generate_signalawgn(A_ula:np.ndarray ,m_antennas:int, arrival_distance: int, t_snapshot: int, snr:float):
+    """
+    Gera um sinal recebido em um arranjo de antenas com ruído AWGN.
+    
+    Parâmetros:
+    - A_ula (np.ndarray): Matriz de resposta direcional.
+    - m_antennas (int): Número de antenas no arranjo.
+    - arrival_distance (int): Número de sinais incidentes (direções de chegada).
+    - t_snapshot (int): Número de snapshots.
+    - snr (float): Relação sinal-ruído (em dB).
+    
+    """
+
+    # Gerar o sinal transmitido
+    sinal = np.zeros((arrival_distance, t_snapshot), dtype=complex)
+    for i in range(arrival_distance):
+        sinal[i] =((np.random.normal(size=t_snapshot) + 1j * np.random.normal(size=t_snapshot))/arrival_distance) / np.sqrt(2)
+
+    # Sinal recebido no arranjo de antenas
+    sinal_aula = np.dot(A_ula, sinal)
+
+    # Adicionando ruído branco gaussiano ao sinal
+    ruido_amplitude = 1/np.sqrt(db2lin(snr))  # Ajusta o ruído com base na SNR
+    noise = (np.random.normal(0, ruido_amplitude, (m_antennas, t_snapshot)) + 
+             1j * np.random.normal(0, ruido_amplitude, (m_antennas, t_snapshot))) / np.sqrt(2)
+    sinal_final = sinal_aula + noise
+
+    return sinal_final
+
+
 
 def generate_signal(m_antennas:int, noise_subspace):
     '''
@@ -78,19 +108,9 @@ def generate_music(A_ula: np.ndarray, arrival_distance: int, t_snapshot: int, m_
     - angles (np.ndarray): Ângulos (em graus) avaliados.
     - p_spectrum (np.ndarray): Espectro MUSIC correspondente aos ângulos.
     """
-    # Gerar o sinal transmitido
-    sinal = np.zeros((arrival_distance, t_snapshot), dtype=complex)
-    for i in range(arrival_distance):
-        sinal[i] =((np.random.normal(size=t_snapshot) + 1j * np.random.normal(size=t_snapshot))/arrival_distance) / np.sqrt(2)
 
-    # Sinal recebido no arranjo de antenas
-    sinal_aula = np.dot(A_ula, sinal)
-
-    # Adicionando ruído branco gaussiano ao sinal
-    ruido_amplitude = 1/np.sqrt(db2lin(snr))  # Ajusta o ruído com base na SNR
-    noise = (np.random.normal(0, ruido_amplitude, (m_antennas, t_snapshot)) + 
-             1j * np.random.normal(0, ruido_amplitude, (m_antennas, t_snapshot))) / np.sqrt(2)
-    sinal_final = sinal_aula + noise
+    # Gerar o sinal recebido com ruído AWGN
+    sinal_final = generate_signalawgn(A_ula, m_antennas, arrival_distance, t_snapshot, snr)
 
     # Matriz de autocorrelação
     sinal_final_hermetiano = np.conj(sinal_final.T)
@@ -134,7 +154,7 @@ def generate_angles_with_min_diff(d_arrival, min_diff, lower=-50, upper=50):
             return phi_uniform_sorted
 
 
-def find_peaks_d(p_spectrum, d_arrival, prominence=2): # Meu código
+def find_peaks_d(p_spectrum, d_arrival, prominence=2): 
     '''
     Encontra os picos no espectro MUSIC, considerando a proeminência dos picos.
     
@@ -159,58 +179,6 @@ def find_peaks_d(p_spectrum, d_arrival, prominence=2): # Meu código
 
     return locs, values
 
-
-
-
-""" def find_peaks_d(p_spectrum, d_arrival, prominence=2): # Chat GPT
-    '''
-    Encontra os picos no espectro MUSIC com base na prominência mínima especificada.
-    Aplica interpolação para obter picos sub-amostrais.
-    
-    Parâmetros:
-    - p_spectrum (np.ndarray): Espectro MUSIC.
-    - d_arrival (int): Número de picos desejados.
-    - prominence (float): Prominência mínima do pico.
-    
-    Retorno:
-    - peaks (np.ndarray): Índices dos picos encontrados.
-    - _ (dict): Informações adicionais sobre os picos.
-    '''
-    # Encontra os picos com a função find_peaks, usando a propriedade de prominência
-    peaks, properties = find_peaks(p_spectrum, prominence=prominence)
-    
-    # Verificar se o número de picos encontrados é suficiente
-    if len(peaks) < d_arrival:
-        print(f"Warning: Apenas {len(peaks)} picos encontrados, esperados {d_arrival} picos.")
-        # Se não houver picos suficientes, retornamos todos os picos encontrados ou algum valor padrão
-        return peaks, properties
-    
-    # Ordenando os picos por prominência (para pegar os picos mais destacados)
-    sorted_peaks = np.argsort(properties["prominences"])[::-1]  # Ordena pela prominência dos picos
-    top_peaks = peaks[sorted_peaks[:d_arrival]]  # Pega os picos mais altos até o número desejado
-
-    # Aplicando a interpolação para obter picos sub-amostrais (refinados)
-    refined_peaks = []
-    for peak in top_peaks:
-        if 1 <= peak < len(p_spectrum) - 1:
-            # Pegar os pontos ao redor do pico para ajustar uma parábola
-            alpha = p_spectrum[peak - 1]
-            beta = p_spectrum[peak]
-            gamma = p_spectrum[peak + 1]
-
-            # Calculando o deslocamento do vértice da parábola em relação ao ponto central
-            p = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma) if (alpha - 2 * beta + gamma) != 0 else 0
-
-            # A posição refinada do pico (sub-amostral)
-            refined_peak = peak + p
-            refined_peaks.append(refined_peak)
-        else:
-            refined_peaks.append(peak)  # Caso o pico esteja no limite, não há interpolação
-
-    refined_peaks = np.array(refined_peaks) - 90  # Transladar para que o centro seja zero
-    refined_peaks = np.sort(refined_peaks)  # Ordenar os picos refinados
-    return refined_peaks, properties
- """
 
 def find_rmse(snr_values: np.ndarray, iterations: int, m_antennas: int, d_arrival: int, t_snapshot: int):
     '''
@@ -261,3 +229,157 @@ def find_rmse(snr_values: np.ndarray, iterations: int, m_antennas: int, d_arriva
         rmse_menor.append(np.sqrt(np.mean(np.abs(phi_menor) ** 2)))
 
     return rmse_maior, rmse_menor
+
+def root_music(signal_awgn: np.ndarray, m_antennas: int, d_arrival: int, true_angles: np.ndarray):
+    """
+    Implementação do algoritmo Root-MUSIC para estimação de ângulos de chegada (DoA).
+
+    Parâmetros:
+    - signal_awgn (np.ndarray): Sinais recebidos com ruído.
+    - m_antennas (int): Número de antenas.
+    - d_arrival (int): Número de ângulos de chegada (fontes).
+    - true_angles (np.ndarray): Ângulos verdadeiros para comparação.
+
+    Retorno:
+    - estimated_angles (np.ndarray): Ângulos estimados pelo Root-MUSIC.
+    - selected_roots (np.ndarray): Raízes selecionadas para conversão em ângulos.
+    """
+
+    # Parâmetros da onda
+    wavelength = 1  # Comprimento de onda normalizado
+    d = wavelength / 2  # Espaçamento entre sensores
+    k = 2 * np.pi / wavelength  # Número de onda
+
+    # Decomposição SVD
+    U, S, Vh = np.linalg.svd(signal_awgn)
+    noise_subspace = U[:, d_arrival:]  # Subespaço de ruído
+
+    # Construção da matriz C, definida como C = E_n E_n^H, onde E é o subespaço do ruído
+    C = np.dot(noise_subspace,noise_subspace.conj().T)  
+
+    #  Definimos a ordem do polinômio como (2M-1), sendo M o número de elementos de antenas
+    z = np.zeros(2 * m_antennas - 1, dtype=complex)
+
+    # Soma das diagonais da matriz C
+    for l in range(m_antennas):
+        z[l] = np.sum(np.diag(C, l))
+        z[-(l + 1)] = z[l].conj()  # Mantendo a simetria
+
+    # Encontrando as raízes do polinômio
+    z_roots = np.roots(z)
+
+    # Selecionando as raízes mais próximas do círculo unitário
+    z_roots = z_roots[np.abs(np.abs(z_roots) - 1) < 0.1]  
+
+    # Convertendo raízes para ângulos
+    angles = np.arcsin(np.angle(z_roots) / (k * d))*180/np.pi
+    
+    # Seleção das raízes mais próximas dos ângulos reais
+
+    selected_roots = []
+    selected_angles = []
+    for true_angle in true_angles:
+        idx = np.argmin(np.abs(angles - true_angle))
+        selected_roots.append(z_roots[idx])
+        selected_angles.append(angles[idx])
+
+    return np.array(selected_angles), np.array(selected_roots)
+
+def find_rmse_rootmusic(snr_values: np.ndarray, iterations: int, m_antennas: int, d_arrival: int, t_snapshot: int):
+    '''
+    Calcula o RMSE (Root Mean Square Error) dos ângulos estimados pelo algoritmo Root MUSIC em diferentes valores de SNR.
+
+    Parâmetros:
+    - snr_values (list or np.ndarray): Lista de valores de SNR (em dB) a serem avaliados.
+    - iterations (int): Número de iterações por valor de SNR.
+    - m_antennas (int): Número de antenas no arranjo.
+    - d_arrival (int): Número de ângulos de chegada (direções de chegada).
+    - t_snapshot (int): Número de snapshots para estimativa de autocorrelação.
+
+    Retorno:
+    - rmse_maior (list): Lista com os valores de RMSE para os maiores ângulos estimados, correspondentes a cada SNR.
+    - rmse_menor (list): Lista com os valores de RMSE para os menores ângulos estimados, correspondentes a cada SNR.
+    '''
+    
+    rmse_maior = []
+    rmse_menor = []
+    
+    for snr_index in snr_values:
+        phi_maior = []
+        phi_menor = []
+
+        for iteration_index in range(iterations):
+            # Gerando os ângulos de chegada
+            phit_uniform = generate_angles_with_min_diff(d_arrival, 20)
+
+            A_ula = gerate_a_ula(m_antennas, d_arrival, phit_uniform)
+
+            # Geração dos sinais recebidos
+            signal_awgn = generate_signalawgn(A_ula, m_antennas, d_arrival, t_snapshot, snr_index)
+
+            # Cálculo do Root-MUSIC
+            estimated_angles, selected_roots = root_music(signal_awgn, m_antennas, d_arrival, phit_uniform)
+
+            maior_diferenca = phit_uniform[0] - estimated_angles[0] 
+            menor_diferena = phit_uniform[1] -  estimated_angles[1]
+
+            phi_maior.append(maior_diferenca)
+            phi_menor.append(menor_diferena)
+
+        # Calculando o RMSE para os ângulos estimados
+        phi_maior = np.array(phi_maior)
+        phi_menor = np.array(phi_menor)
+
+        rmse_maior.append(np.sqrt(np.mean(np.abs(phi_maior) ** 2)))
+        rmse_menor.append(np.sqrt(np.mean(np.abs(phi_menor) ** 2)))
+
+    return rmse_maior, rmse_menor
+
+def mvdr_beamforming(A_ula: np.ndarray, m_antennas: int, arrival_distance: int, t_snapshot: int, snr: float, theta_target: float):
+    """
+    Implementação do beamforming MVDR.
+
+    Parâmetros:
+    - A_ula (np.ndarray): Matriz de resposta direcional.
+    - m_antennas (int): Número de antenas no arranjo.
+    - arrival_distance (int): Número de ângulos de chegada (fontes).
+    - t_snapshot (int): Número de snapshots.
+    - snr (float): Relação sinal-ruído (em dB).
+    - theta_target (float): Ângulo de interesse (graus).
+
+    Retorno:
+    - B (np.ndarray): Padrão de radiação (beampattern).
+    - theta_scan (np.ndarray): Ângulos varridos (-90° a 90°).
+    """
+
+    # Geração dos sinais recebidos com ruído
+    received_signal = generate_signalawgn(A_ula, m_antennas, arrival_distance, t_snapshot, snr)
+
+    # Matriz de covariância R = XX^H / t_snapshot
+    R = np.dot(received_signal, np.conj(received_signal.T)) / t_snapshot
+
+    # Inverter a matriz de covariância
+    R_inv = np.linalg.inv(R)
+
+    # Vetor de steering para o ângulo de interesse
+    theta_target_rad = (theta_target)*(np.pi/180) # Ângulo de interesse em radianos
+
+    
+    d = 0.5  # Espaçamento normalizado entre antenas
+    k = 2 * np.pi  # Número de onda normalizado
+    a_target = np.exp(-1j * k * d * np.arange(m_antennas) * np.sin(theta_target_rad))
+    a_target = a_target.reshape(-1, 1)
+
+    # Cálculo dos pesos MVDR
+    w_mvdr = (R_inv @ a_target) / (a_target.conj().T @ R_inv @ a_target)
+
+    # Varrendo ângulos para construir o padrão de radiação
+    theta_scan = np.linspace(-90, 90, 360)  # Ângulos de -90° a 90°
+    B = np.zeros_like(theta_scan, dtype=complex)
+
+    for i, theta in enumerate(theta_scan):
+        theta_rad = np.deg2rad(theta)
+        a_scan = np.exp(-1j * k * d * np.arange(m_antennas) * np.sin(theta_rad)).reshape(-1, 1)
+        B[i] = w_mvdr.conj().T @ a_scan  # Beampattern
+
+    return lin2db(np.abs(B)), theta_scan
